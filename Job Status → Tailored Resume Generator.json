@@ -1,0 +1,489 @@
+{
+  "name": "Job Status → Tailored Resume Generator",
+  "nodes": [
+    {
+      "parameters": {
+        "pollTimes": {
+          "item": [
+            {
+              "mode": "everyMinute"
+            }
+          ]
+        },
+        "documentId": {
+          "__rl": true,
+          "value": "1__Da3C112hGVPTPl1N6AXHMXyrj47auZ7aI6zJs4DrY",
+          "mode": "list",
+          "cachedResultName": "Jobs",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1__Da3C112hGVPTPl1N6AXHMXyrj47auZ7aI6zJs4DrY/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Sheet1",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1__Da3C112hGVPTPl1N6AXHMXyrj47auZ7aI6zJs4DrY/edit#gid=0"
+        },
+        "event": "rowUpdate",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheetsTrigger",
+      "typeVersion": 1,
+      "position": [
+        -416,
+        96
+      ],
+      "id": "9792a69a-3578-473c-a934-e47dbe8bd3bf",
+      "name": "Google Sheets Trigger"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "e0319427-f045-4ad4-8efb-00d49689cbe0",
+              "leftValue": "={{ $json.Status }}",
+              "rightValue": "Prepare Resume",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        -208,
+        96
+      ],
+      "id": "90cab4c0-67b0-4a28-920d-37dab2d4e8d7",
+      "name": "If"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "8f265286-36e7-49b2-b7b1-3910f5fe7772",
+              "name": "job_id",
+              "value": "={{ $json.JobID }}",
+              "type": "string"
+            },
+            {
+              "id": "92879113-a27a-496b-9fc2-4eaaace5a3fc",
+              "name": "company",
+              "value": "={{ $json.Company }}",
+              "type": "string"
+            },
+            {
+              "id": "35938697-fede-4ee3-9620-dbb38d4ae496",
+              "name": "role",
+              "value": "={{ $json.Role }}",
+              "type": "string"
+            },
+            {
+              "id": "b23f89db-ff05-44ff-b206-57c7d967fb5e",
+              "name": "jd",
+              "value": "={{ $json.JobDescription }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        0,
+        0
+      ],
+      "id": "248133ea-34e7-4643-92b8-f1534ba73156",
+      "name": "Edit Fields"
+    },
+    {
+      "parameters": {
+        "resource": "databasePage",
+        "operation": "getAll",
+        "databaseId": {
+          "__rl": true,
+          "value": "2d29297a-4523-80ae-ba9f-dadddf0c3ded",
+          "mode": "list",
+          "cachedResultName": "Resume Content ",
+          "cachedResultUrl": "https://www.notion.so/2d29297a452380aeba9fdadddf0c3ded"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.notion",
+      "typeVersion": 2.2,
+      "position": [
+        208,
+        0
+      ],
+      "id": "ec5ccb4b-8f04-4e73-a2e3-2e0f97d1b730",
+      "name": "Get many database pages"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Aggregates ALL resume blocks into one array\nconst resumeBlocks = items.map(item => {\n  // Defensive check to handle different Notion node output formats\n  const title = item.json.property_Title || item.json.Name || \"Untitled\";\n  const content = item.json.property_Content || item.json.Content || \"\";\n  const skills = item.json.property_Skills || item.json.Skills || [];\n\n  return { title, content, skills };\n});\n\n// Reach back to the \"Edit Fields\" node for Job context\n// This is critical because \"Get many database pages\" wiped the input data\nconst jobContext = $(\"Edit Fields\").item.json;\n\nreturn [{\n  json: {\n    ...jobContext,\n    resume_blocks: resumeBlocks\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        416,
+        0
+      ],
+      "id": "ac31b6fd-d6b6-45be-bce4-55da4e6cce2a",
+      "name": "Code in JavaScript",
+      "executeOnce": true
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "value": "models/gemini-2.5-flash",
+          "mode": "list",
+          "cachedResultName": "models/gemini-2.5-flash"
+        },
+        "messages": {
+          "values": [
+            {
+              "content": "You are a resume assistant.\nUse ONLY the provided resume blocks.\nDo not invent skills or experience.\nOutput STRICT JSON only.\n",
+              "role": "model"
+            },
+            {
+              "content": "=Job Description:\n{{ $json.jd }}\n\nResume Blocks:\n{{ JSON.stringify($json.resume_blocks) }}\n\nReturn STRICT JSON in this exact format:\n\n{\n  \"tailored_bullets\": \"string\",\n  \"summary\": \"string\"\n}\n"
+            }
+          ]
+        },
+        "simplify": false,
+        "jsonOutput": true,
+        "builtInTools": {},
+        "options": {
+          "temperature": 0.2
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.googleGemini",
+      "typeVersion": 1.1,
+      "position": [
+        624,
+        0
+      ],
+      "id": "15c273dc-b2b2-4959-a561-ffbd5e6b8f89",
+      "name": "Message a model1"
+    },
+    {
+      "parameters": {
+        "resource": "databasePage",
+        "databaseId": {
+          "__rl": true,
+          "value": "2d29297a-4523-8094-9af9-c687b750f548",
+          "mode": "list",
+          "cachedResultName": "Resume Versions",
+          "cachedResultUrl": "https://www.notion.so/2d29297a452380949af9c687b750f548"
+        },
+        "title": "NewDecemberDroid",
+        "propertiesUi": {
+          "propertyValues": [
+            {
+              "key": "Title|title",
+              "title": "=Resume – {{ $json.company }} – {{ $json.role }}"
+            },
+            {
+              "key": "Company|rich_text",
+              "textContent": "={{ $json.company }}"
+            },
+            {
+              "key": "Role|rich_text",
+              "textContent": "={{$json.role}}"
+            },
+            {
+              "key": "Tailored Bullets|rich_text",
+              "textContent": "={{ $json.tailored_bullets }}"
+            },
+            {
+              "key": "Summary|rich_text",
+              "textContent": "={{ $json.summary }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.notion",
+      "typeVersion": 2.2,
+      "position": [
+        1184,
+        0
+      ],
+      "id": "09a743d2-bec7-474e-bb62-ee160ab1a7d7",
+      "name": "Create a database page"
+    },
+    {
+      "parameters": {
+        "jsCode": "// 1. Extract raw text from the nested Gemini structure\nconst rawText = $json.candidates?.[0]?.content?.parts?.[0]?.text;\n\nif (!rawText) {\n  throw new Error(\"AI output text not found. Check if the Gemini node ran successfully.\");\n}\n\n// 2. Clean up Markdown JSON blocks if the AI included them\nconst cleanJson = rawText.replace(/```json/g, \"\").replace(/```/g, \"\").trim();\n\ntry {\n  const parsed = JSON.parse(cleanJson);\n  \n  // 3. Re-attach context from the upstream Code node\n  const upstream = $(\"Code in JavaScript\").item.json;\n\n  return [{\n    json: {\n      company: upstream.company,\n      role: upstream.role,\n      tailored_bullets: parsed.tailored_bullets || \"No bullets generated\",\n      summary: parsed.summary || \"No summary generated\"\n    }\n  }];\n} catch (e) {\n  throw new Error(\"Failed to parse AI JSON. Raw output: \" + rawText);\n}"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        992,
+        0
+      ],
+      "id": "300afcc5-a894-4164-a054-9fde0e29ea03",
+      "name": "Code in JavaScript2"
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "documentId": {
+          "__rl": true,
+          "value": "1__Da3C112hGVPTPl1N6AXHMXyrj47auZ7aI6zJs4DrY",
+          "mode": "list",
+          "cachedResultName": "Jobs",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1__Da3C112hGVPTPl1N6AXHMXyrj47auZ7aI6zJs4DrY/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Sheet1",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1__Da3C112hGVPTPl1N6AXHMXyrj47auZ7aI6zJs4DrY/edit#gid=0"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "JobID": "={{ $json.id }}",
+            "ResumeLink": "={{ $json.id }}",
+            "Status": "Applied"
+          },
+          "matchingColumns": [
+            "JobID"
+          ],
+          "schema": [
+            {
+              "id": "JobID",
+              "displayName": "JobID",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Company",
+              "displayName": "Company",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Role",
+              "displayName": "Role",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "JobURL",
+              "displayName": "JobURL",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "JobDescription",
+              "displayName": "JobDescription",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Status",
+              "displayName": "Status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Priority",
+              "displayName": "Priority",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "LastEmailType",
+              "displayName": "LastEmailType",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "LastEmailDate",
+              "displayName": "LastEmailDate",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "ResumeLink",
+              "displayName": "ResumeLink",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "row_number",
+              "displayName": "row_number",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true,
+              "readOnly": true,
+              "removed": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        1392,
+        0
+      ],
+      "id": "a867f0b9-b762-4169-9f6f-9b674d11d4fa",
+      "name": "Update row in sheet"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Google Sheets Trigger": {
+      "main": [
+        [
+          {
+            "node": "If",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If": {
+      "main": [
+        [
+          {
+            "node": "Edit Fields",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Edit Fields": {
+      "main": [
+        [
+          {
+            "node": "Get many database pages",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get many database pages": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript": {
+      "main": [
+        [
+          {
+            "node": "Message a model1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Message a model1": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create a database page": {
+      "main": [
+        [
+          {
+            "node": "Update row in sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript2": {
+      "main": [
+        [
+          {
+            "node": "Create a database page",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "",
+  "meta": {
+    "instanceId": "809066fd79c7493229d8b5ffc008257082ff0c8e7ef598ff1ace44186290135d"
+  },
+  "tags": []
+}
